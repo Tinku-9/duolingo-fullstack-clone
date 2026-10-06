@@ -33,7 +33,7 @@ The daily rows record XP and completed lessons per local calendar date. They sup
 
 ## Deliberate simplifications
 
-The learner is a shared default account, hearts refill for free through an explicitly mocked action, and the other leaderboard users are seeded. Wrong exercises reveal the correction and advance rather than adding a retry queue. These choices keep the assignment focused on its required lesson and persistence workflows.
+The learner is a browser-specific guest identified by a random bearer token, hearts refill for free through an explicitly mocked action, and the other leaderboard users are seeded. Wrong exercises reveal the correction and advance rather than adding a retry queue. These choices keep the assignment focused on its required lesson and persistence workflows.
 
 ## Explain these choices in the interview
 
@@ -45,3 +45,7 @@ The learner is a shared default account, hearts refill for free through an expli
 - Which features are mocked and which are implemented end to end.
 
 This is a first implementation. A successful source check is not proof of a working deployed app: dependency installation, API integration tests, the frontend build, and browser verification must also pass.
+
+## Guest identity
+
+The API client creates a guest once and persists its opaque token in localStorage. `current_user` hashes the bearer token and resolves the user through `GuestProfile`; there is no fallback to user 1. Every learner endpoint uses that identity, and `get_attempt` enforces ownership for reading, answering, completing, and abandoning attempts. Creation uses a serialized write transaction. Only token hashes are stored on the server. The new table is additive, preserving the deployed schema and shared learner history. See README for backup and redeployment steps.

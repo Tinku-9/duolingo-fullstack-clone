@@ -1,9 +1,11 @@
 import os
+import hashlib
+import secrets
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
@@ -11,9 +13,9 @@ from sqlalchemy.orm import Session
 
 from .database import Base, SessionLocal, engine, get_db
 from .grading import correction, grade, validate_answer
-from .models import AttemptAnswer, DailyActivity, Exercise, Lesson, LessonAttempt, SkillProgress, User, utc_now
+from .models import AttemptAnswer, DailyActivity, Exercise, Lesson, LessonAttempt, SkillProgress, User, GuestProfile, utc_now
 from .seed import seed
-from .services import attempt_view, course_path, exercises_for, get_attempt, learner, local_today, stats
+from .services import attempt_view, course_path, exercises_for, get_attempt, local_today, stats
 
 
 @asynccontextmanager
@@ -25,7 +27,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="Duolingo Assignment API", version="0.1.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","), allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","), allow_methods=["GET", "POST"], allow_headers=["Content-Type", "Authorization"])
 
 
 class AnswerRequest(BaseModel):
@@ -39,25 +41,49 @@ def write_lock(db):
     db.execute(text("BEGIN IMMEDIATE"))
 
 
+def current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Guest token required")
+    token = authorization[7:]
+    if len(token) != 43:
+        raise HTTPException(401, "Invalid guest token")
+    profile = db.get(GuestProfile, hashlib.sha256(token.encode()).hexdigest())
+    if not profile:
+        raise HTTPException(401, "Invalid guest token")
+    return db.get(User, profile.user_id).id
+
+
+@app.post("/api/guests")
+def create_guest(db: Session = Depends(get_db)):
+    write_lock(db)
+    token = secrets.token_urlsafe(32)
+    user = User(display_name="Guest")
+    db.add(user)
+    db.flush()
+    db.add(GuestProfile(token_hash=hashlib.sha256(token.encode()).hexdigest(), user_id=user.id))
+    db.commit()
+    return {"token": token}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
 @app.get("/api/me")
-def me(db: Session = Depends(get_db)):
-    return stats(db, learner(db))
+def me(db: Session = Depends(get_db), user_id: int = Depends(current_user)):
+    return stats(db, db.get(User, user_id))
 
 
 @app.get("/api/courses/{course_id}/path")
-def path(course_id: int, db: Session = Depends(get_db)):
-    return course_path(db, learner(db), course_id)
+def path(course_id: int, db: Session = Depends(get_db), user_id: int = Depends(current_user)):
+    return course_path(db, db.get(User, user_id), course_id)
 
 
 @app.post("/api/lessons/{lesson_id}/attempts")
-def start(lesson_id: int, db: Session = Depends(get_db)):
+def start(lesson_id: int, db: Session = Depends(get_db), user_id: int = Depends(current_user)):
     write_lock(db)
-    user = learner(db)
+    user = db.get(User, user_id)
     lesson = db.get(Lesson, lesson_id)
     if not lesson:
         raise HTTPException(404, "Lesson not found")
@@ -76,22 +102,22 @@ def start(lesson_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/me/active-attempt")
-def active_attempt(db: Session = Depends(get_db)):
-    user = learner(db)
+def active_attempt(db: Session = Depends(get_db), user_id: int = Depends(current_user)):
+    user = db.get(User, user_id)
     attempt = db.scalar(select(LessonAttempt).where(LessonAttempt.user_id == user.id, LessonAttempt.status == "active"))
     return attempt_view(db, attempt, user) if attempt else None
 
 
 @app.get("/api/attempts/{attempt_id}")
-def attempt(attempt_id: str, db: Session = Depends(get_db)):
-    user = learner(db)
+def attempt(attempt_id: str, db: Session = Depends(get_db), user_id: int = Depends(current_user)):
+    user = db.get(User, user_id)
     return attempt_view(db, get_attempt(db, attempt_id, user), user)
 
 
 @app.post("/api/attempts/{attempt_id}/answers")
-def answer(attempt_id: str, body: AnswerRequest, db: Session = Depends(get_db)):
+def answer(attempt_id: str, body: AnswerRequest, db: Session = Depends(get_db), user_id: int = Depends(current_user)):
     write_lock(db)
-    user = learner(db)
+    user = db.get(User, user_id)
     attempt = get_attempt(db, attempt_id, user)
     previous = db.scalar(select(AttemptAnswer).where(AttemptAnswer.attempt_id == attempt.id, AttemptAnswer.exercise_id == body.exercise_id))
     exercise = db.get(Exercise, body.exercise_id)
@@ -119,9 +145,9 @@ def answer(attempt_id: str, body: AnswerRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/api/attempts/{attempt_id}/complete")
-def complete(attempt_id: str, db: Session = Depends(get_db)):
+def complete(attempt_id: str, db: Session = Depends(get_db), user_id: int = Depends(current_user)):
     write_lock(db)
-    user = learner(db)
+    user = db.get(User, user_id)
     attempt = get_attempt(db, attempt_id, user)
     if attempt.status == "completed":
         return {"attempt": attempt_view(db, attempt, user), "learner": stats(db, user)}
@@ -149,9 +175,9 @@ def complete(attempt_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/attempts/{attempt_id}/abandon")
-def abandon(attempt_id: str, db: Session = Depends(get_db)):
+def abandon(attempt_id: str, db: Session = Depends(get_db), user_id: int = Depends(current_user)):
     write_lock(db)
-    user = learner(db)
+    user = db.get(User, user_id)
     attempt = get_attempt(db, attempt_id, user)
     if attempt.status == "active":
         attempt.status = "abandoned"
@@ -160,27 +186,27 @@ def abandon(attempt_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/me/hearts/refill")
-def refill(db: Session = Depends(get_db)):
+def refill(db: Session = Depends(get_db), user_id: int = Depends(current_user)):
     write_lock(db)
-    user = learner(db)
+    user = db.get(User, user_id)
     user.hearts = 5
     db.commit()
     return stats(db, user)
 
 
 @app.get("/api/leaderboard")
-def leaderboard(db: Session = Depends(get_db)):
-    today = local_today(learner(db))
+def leaderboard(db: Session = Depends(get_db), user_id: int = Depends(current_user)):
+    today = local_today(db.get(User, user_id))
     start = today - timedelta(days=today.weekday())
     activity = list(db.scalars(select(DailyActivity).where(DailyActivity.activity_date >= start, DailyActivity.activity_date <= today)))
-    rows = [{"id": user.id, "name": user.display_name, "xp": sum(x.xp for x in activity if x.user_id == user.id), "is_you": user.id == 1} for user in db.scalars(select(User))]
+    rows = [{"id": user.id, "name": user.display_name, "xp": sum(x.xp for x in activity if x.user_id == user.id), "is_you": user.id == user_id} for user in db.scalars(select(User).where((User.id == user_id) | (~User.id.in_(select(GuestProfile.user_id)))))]
     rows.sort(key=lambda x: (-x["xp"], x["id"]))
     return {"league": "Bronze", "week_start": str(start), "entries": [{**row, "rank": i + 1} for i, row in enumerate(rows)]}
 
 
 @app.get("/api/me/profile")
-def profile(db: Session = Depends(get_db)):
-    user = learner(db)
+def profile(db: Session = Depends(get_db), user_id: int = Depends(current_user)):
+    user = db.get(User, user_id)
     summary = stats(db, user)
     completed = len(list(db.scalars(select(SkillProgress).where(SkillProgress.user_id == user.id))))
     return {**summary, "completed_skills": completed, "achievements": [{"title": "Wildfire", "description": "Build a 3-day streak", "earned": summary["streak"] >= 3}, {"title": "Sage", "description": "Earn 100 XP", "earned": summary["total_xp"] >= 100}, {"title": "Trailblazer", "description": "Complete 3 skills", "earned": completed >= 3}]}

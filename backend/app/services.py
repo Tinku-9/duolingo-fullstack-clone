@@ -8,13 +8,6 @@ from .grading import current_streak
 from .models import AttemptAnswer, DailyActivity, Exercise, Lesson, LessonAttempt, Skill, Unit, User
 
 
-def learner(db):
-    user = db.get(User, 1)
-    if not user:
-        raise HTTPException(503, "Demo learner has not been seeded")
-    return user
-
-
 def local_today(user):
     return datetime.now(ZoneInfo(user.timezone)).date()
 

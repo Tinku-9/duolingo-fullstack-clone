@@ -72,6 +72,7 @@ Content tables preserve ordering with position fields. Exercise public and answe
 | Method | Route | Purpose |
 |---|---|---|
 | GET | `/health` | Service health |
+| POST | `/api/guests` | Create a guest and return its token |
 | GET | `/api/me` | Learner stats and daily goal |
 | GET | `/api/courses/{id}/path` | Units, skill progress, lesson availability |
 | GET | `/api/me/active-attempt` | Resume an existing lesson |
@@ -88,7 +89,7 @@ Answer requests contain `exercise_id` and an `answer` object: `option_id`, order
 
 ## Learning rules and assumptions
 
-- Default learner Alex; real authentication is intentionally simplified. This is a public demo with shared learner progress, not a production multi-user service.
+- Each browser gets a separate guest learner through an opaque bearer token stored in localStorage. New guests start with five hearts, zero XP, and lesson 1 available. Clearing browser storage creates a new profile; copying a token grants access to its profile. Existing Alex and seeded leaderboard data are retained.
 - One Spanish course with 3 units, 6 skills, 12 lessons, and 60 seeded exercises. The sample learner has already completed the first skill.
 - A wrong exercise costs one heart. An entire matching exercise costs at most one heart. At zero hearts the attempt fails; the learner may use a clearly labeled mocked refill and start over.
 - Wrong answers reveal the correction and advance; the initial implementation has no end-of-lesson mistake retry queue.
@@ -131,3 +132,23 @@ A headless Chrome test against the running frontend and FastAPI backend passes a
 The live SQLite persistence check also passes: total XP, hearts, streak, completed lesson, and the next unlocked lesson survive stopping and restarting the backend. The browser smoke test has added 20 XP and completed lesson 3 in the local demo database.
 
 For a guided explanation of the implementation, read `CODE_WALKTHROUGH.md`.
+
+## Guest profiles and safe redeployment
+
+`POST /api/guests` returns a cryptographically random token. All learner routes require `Authorization: Bearer <token>`; missing or unknown tokens return 401. SQLite stores the SHA-256 hash in the new `guest_profiles` table, linked to a new user. Attempts belonging to another guest return 404. Leaderboards show the current guest and existing seeded learners, excluding other guest profiles. The frontend uses the same localStorage token across refreshes and tabs (Web Locks serializes initial creation where supported). Storage must be enabled. Tokens remain valid across backend restarts; there is no account recovery or expiry. Serve production traffic over HTTPS.
+
+1. Record the current backend `DATABASE_URL`, persistent disk mount, frontend API URL, and CORS origin. Keep the same database path and disk attached during redeployment. Do not replace the SQLite file with a local database or run a reset/seed cleanup.
+2. Back up the deployed database before updating. Use SQLite's online backup API rather than copying an active database file without its WAL. Example on the backend host, substituting the real absolute paths:
+
+   ```python
+   import sqlite3
+   with sqlite3.connect('/mounted/path/duolingo.db') as source:
+       with sqlite3.connect('/mounted/path/duolingo-before-guests.db') as backup:
+           source.backup(backup)
+   ```
+
+3. Deploy the backend code with the existing environment and persistent disk. Startup adds only `guest_profiles` through `create_all`; it does not alter or drop existing tables. Existing course seeding returns immediately when the course already exists. Old shared progress stays in user 1 and is not assigned to a new visitor.
+4. Build and redeploy the frontend with its existing `NEXT_PUBLIC_API_URL`. Backend CORS now permits the Authorization header. Coordinate both releases: the old frontend cannot call the new authenticated learner routes.
+5. In two separate browser profiles or a normal and private window, verify distinct learner IDs, complete a lesson in one, and confirm the other retains its own XP, hearts, and unlocks. Refresh the first browser, restart the backend, and verify the same profile and progress return. Check `/health` and keep the backup until these checks pass.
+
+Verification uses isolated test databases, including a file-backed previous-schema database that is reopened after upgrade. Production data is never used by these tests. The older browser smoke script assumes the original seeded learner and lesson 3; it needs adaptation before use with fresh guests.

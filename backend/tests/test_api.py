@@ -1,4 +1,5 @@
 import unittest
+import hashlib
 import importlib.util
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -11,7 +12,7 @@ if API_AVAILABLE:
     from sqlalchemy.pool import StaticPool
     from app.database import Base, get_db
     from app.main import app
-    from app.models import DailyActivity, Exercise, User
+    from app.models import DailyActivity, Exercise, User, GuestProfile
     from app.seed import seed
     from app.services import local_today, stats
 
@@ -27,12 +28,14 @@ class ApiTests(unittest.TestCase):
         self.sessions = sessionmaker(self.engine, expire_on_commit=False)
         with self.sessions() as db:
             seed(db)
+            db.add(GuestProfile(token_hash=hashlib.sha256(("t" * 43).encode()).hexdigest(), user_id=1))
+            db.commit()
         def override_db():
             with self.sessions() as db:
                 yield db
         app.dependency_overrides[get_db] = override_db
         # Schema and seeds are explicitly created in the isolated test database.
-        self.client = TestClient(app)
+        self.client = TestClient(app, headers={"Authorization": "Bearer " + "t" * 43})
 
     def tearDown(self):
         self.client.close()
@@ -124,6 +127,53 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()["status"], "abandoned")
         self.assertEqual(self.client.get("/api/me").json()["total_xp"], 120)
         self.assertNotEqual(self.start()["id"], attempt["id"])
+
+    def test_guest_isolation_and_token_validation(self):
+        a = TestClient(app)
+        b = TestClient(app)
+        try:
+            self.assertEqual(a.get("/api/me").status_code, 401)
+            self.assertEqual(a.get("/api/me", headers={"Authorization": "Bearer " + "x" * 43}).status_code, 401)
+            token_a = a.post("/api/guests").json()["token"]
+            token_b = b.post("/api/guests").json()["token"]
+            self.assertNotEqual(token_a, token_b)
+            a.headers["Authorization"] = "Bearer " + token_a
+            b.headers["Authorization"] = "Bearer " + token_b
+            before_b = b.get("/api/me").json()
+            self.assertEqual(before_b["total_xp"], 0)
+            self.assertNotEqual(a.get("/api/me").json()["id"], before_b["id"])
+            attempt = a.post("/api/lessons/1/attempts").json()
+            root = f"/api/attempts/{attempt['id']}"
+            payload = {"exercise_id": attempt["exercise"]["id"], "answer": {"option_id": "a"}}
+            self.assertEqual(a.post(root + "/answers", json=payload).json()["attempt"]["hearts"], 4)
+            for suffix in ("", "/answers", "/complete", "/abandon"):
+                response = b.get(root) if not suffix else b.post(root + suffix, json=payload if suffix == "/answers" else None)
+                self.assertEqual(response.status_code, 404)
+            self.assertIsNone(b.get("/api/me/active-attempt").json())
+            self.assertEqual(b.get("/api/me").json(), before_b)
+            self.assertEqual(a.get("/api/me/profile").json()["completed_skills"], 0)
+            # A replacement client using the persisted token resumes the same profile.
+            restored = TestClient(app, headers={"Authorization": "Bearer " + token_a})
+            try:
+                self.assertEqual(restored.get(root).json()["answered"], 1)
+                self.assertEqual(restored.get("/api/me").json()["hearts"], 4)
+            finally:
+                restored.close()
+            original = self.client
+            self.client = a
+            finished = self.solve(a.get(root).json())
+            self.assertEqual(a.post(root + "/complete").json()["learner"]["total_xp"], 20)
+            self.client = original
+            self.assertEqual(b.get("/api/me").json(), before_b)
+            path_b = b.get("/api/courses/1/path").json()
+            self.assertEqual(path_b["units"][0]["skills"][0]["lessons"][1]["state"], "locked")
+            board = a.get("/api/leaderboard").json()["entries"]
+            self.assertEqual(sum(row["is_you"] for row in board), 1)
+            self.assertNotIn(before_b["id"], [row["id"] for row in board])
+            self.assertEqual(self.client.get("/api/me").json()["total_xp"], 120)
+        finally:
+            a.close()
+            b.close()
 
     def test_clock_uses_learner_timezone(self):
         with self.sessions() as db:

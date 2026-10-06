@@ -108,3 +108,10 @@ class DailyActivity(Base):
     activity_date: Mapped[date] = mapped_column(Date)
     xp: Mapped[int] = mapped_column(default=0)
     lessons_completed: Mapped[int] = mapped_column(default=0)
+
+
+class GuestProfile(Base):
+    __tablename__ = "guest_profiles"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
