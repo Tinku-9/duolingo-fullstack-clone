@@ -1,0 +1,16 @@
+node_modules/
+.npm-cache/
+.wheel-cache/
+.next/
+.venv/
+__pycache__/
+.pytest_cache/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+*.tsbuildinfo
+backend/data/
+.browser-profile/
+artifacts/

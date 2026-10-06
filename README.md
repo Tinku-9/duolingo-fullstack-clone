@@ -1,0 +1,133 @@
+# Duolingo Fullstack Assignment
+
+An original Spanish-learning application built with Next.js/TypeScript, FastAPI, SQLAlchemy, and SQLite. Includes a sequential learning path, five exercise types, persisted lesson attempts, hearts, daily XP goals, streaks, a seeded leaderboard, and learner profiles.
+
+## Run locally on Windows
+
+Requirements: Node.js 22, Python 3.10 or newer, and internet access for installing packages.
+
+From the repository root:
+
+```powershell
+python -m venv backend/.venv
+.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+npm.cmd --prefix frontend install
+```
+
+Start the backend in one terminal:
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Start the frontend in another terminal, from the repository root:
+
+```powershell
+npm.cmd --prefix frontend run dev
+```
+
+Open http://127.0.0.1:3000. API documentation is at http://127.0.0.1:8000/docs. The database is automatically created and seeded on backend startup. Seeding never resets existing progress.
+
+On macOS/Linux, use `backend/.venv/bin/python` and `npm` instead of the Windows commands above.
+
+## Configuration
+
+Frontend: set `NEXT_PUBLIC_API_URL` in `frontend/.env.local`; defaults to `http://127.0.0.1:8000`.
+
+Backend environment variables:
+
+- `DATABASE_URL`: SQLite URL; defaults to an absolute path at `backend/data/duolingo.db`.
+- `CORS_ORIGINS`: comma-separated frontend origins; defaults to the localhost and 127.0.0.1 development origins on port 3000.
+
+The backend reads process environment variables. `.env.example` documents them; it does not automatically load a `.env` file.
+
+## Architecture
+
+The frontend uses App Router pages and reusable dashboard, lesson, and exercise components. Its typed API client presents clear network errors. The backend owns answers, hearts, XP rewards, unlocks, and daily activity. UI selections are local; learner state and submitted exercise answers persist in SQLite. A lesson can be resumed after a refresh.
+
+`backend/app/models.py` defines the schema, `seed.py` defines curated Spanish content, `grading.py` handles pure grading/streak functions, `services.py` builds learner/path/attempt views, and `main.py` defines HTTP routes. SQLite write transactions serialize mutations so repeated or concurrent requests do not award XP or deduct hearts twice.
+
+## Database schema
+
+```mermaid
+erDiagram
+    COURSE ||--o{ UNIT : contains
+    UNIT ||--o{ SKILL : contains
+    SKILL ||--o{ LESSON : contains
+    LESSON ||--o{ EXERCISE : contains
+    USER ||--o{ SKILL_PROGRESS : earns
+    SKILL ||--o{ SKILL_PROGRESS : tracks
+    USER ||--o{ LESSON_ATTEMPT : starts
+    LESSON ||--o{ LESSON_ATTEMPT : attempted
+    LESSON_ATTEMPT ||--o{ ATTEMPT_ANSWER : records
+    EXERCISE ||--o{ ATTEMPT_ANSWER : answered
+    USER ||--o{ DAILY_ACTIVITY : logs
+```
+
+Content tables preserve ordering with position fields. Exercise public and answer JSON payloads support different exercise types; grading answers are never included in unsubmitted exercise responses. Attempt answers are unique per attempt/exercise. Skill progress is unique per user/skill; activity is unique per user/local date. Foreign keys are enabled. Hearts have a 0–5 database constraint; daily XP is nonnegative.
+
+## API overview
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/health` | Service health |
+| GET | `/api/me` | Learner stats and daily goal |
+| GET | `/api/courses/{id}/path` | Units, skill progress, lesson availability |
+| GET | `/api/me/active-attempt` | Resume an existing lesson |
+| POST | `/api/lessons/{id}/attempts` | Start or reuse an active lesson |
+| GET | `/api/attempts/{id}` | Current exercise and persisted attempt |
+| POST | `/api/attempts/{id}/answers` | Validate and grade the current exercise |
+| POST | `/api/attempts/{id}/complete` | Award XP once and update progression |
+| POST | `/api/attempts/{id}/abandon` | Exit without lesson rewards |
+| POST | `/api/me/hearts/refill` | Mocked free heart refill |
+| GET | `/api/leaderboard` | Current weekly seeded ranking |
+| GET | `/api/me/profile` | Stats and derived achievements |
+
+Answer requests contain `exercise_id` and an `answer` object: `option_id`, ordered `token_ids`, a `pairs` mapping, or `text` depending on exercise type. 404 indicates a missing resource, 409 a progression/state conflict, and 422 malformed input.
+
+## Learning rules and assumptions
+
+- Default learner Alex; real authentication is intentionally simplified. This is a public demo with shared learner progress, not a production multi-user service.
+- One Spanish course with 3 units, 6 skills, 12 lessons, and 60 seeded exercises. The sample learner has already completed the first skill.
+- A wrong exercise costs one heart. An entire matching exercise costs at most one heart. At zero hearts the attempt fails; the learner may use a clearly labeled mocked refill and start over.
+- Wrong answers reveal the correction and advance; the initial implementation has no end-of-lesson mistake retry queue.
+- A successful attempt earns 20 XP, including intentional practice replays. The same attempt can never earn XP twice. A skill completes after both its lessons are completed; progression is linear.
+- A daily goal is 40 XP. Streaks count consecutive local dates with completed lessons in Asia/Kolkata. Multiple lessons on the same day do not increase the day count.
+- XP totals derive from daily activity. Leaderboards use the current Monday-start week; ties break by user ID. Other learners are seeded profiles.
+- Text answers ignore case, repeated whitespace, and trailing punctuation, but retain accents. Accepted variants are curated.
+- Gems, account settings, subscriptions, speech recognition, and social features are mocked or placeholders. The owl illustration is original inline SVG.
+
+## Verification
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+```powershell
+npm.cmd --prefix frontend run typecheck
+npm.cmd --prefix frontend run build
+```
+
+Tests cover grading and streak boundaries, idempotent seed/answer/completion requests, lesson locks, refresh recovery, malformed/out-of-order submission, failure/refill, skill unlocking, and abandonment. API tests require installed backend dependencies; the runner marks them skipped when packages are missing.
+
+## Deployment
+
+Frontend: install dependencies and run `npm run build` on a Next.js-compatible host. Set `NEXT_PUBLIC_API_URL` before building.
+
+Backend: install `backend/requirements.txt`, set the working directory to `backend`, and run `python -m uvicorn app.main:app --host 0.0.0.0 --port <host-provided-port>`. Set `CORS_ORIGINS` to the deployed frontend origin. Mount a persistent disk, create its database directory, and set `DATABASE_URL=sqlite:////absolute/mounted/path/duolingo.db`. Verify data survives a restart. Do not store the production database on an ephemeral serverless filesystem.
+
+The public repository and hosted demo links will be added after deployment. See `PROJECT_BLUEPRINT.md` for scope and milestones.
+
+## Current verification status
+
+The frontend TypeScript check and optimized production build pass. Production HTTP smoke checks return 200 for the learning, leaderboard, profile, settings, and lesson routes. All 18 backend tests pass, including API integration tests.
+
+A headless Chrome test against the running frontend and FastAPI backend passes all five exercise types, incorrect feedback/heart deduction, refresh recovery, lesson completion with 20 XP and 80% accuracy, profile/leaderboard rendering, mobile horizontal-overflow checks, and mocked heart refill. Screenshots are saved in the ignored `artifacts/` directory. The browser test completes lesson 3 for the shared demo learner and requires freshly seeded data; use a separate `DATABASE_URL` when repeating it. The script is `backend/tests/browser_smoke.py` and requires Chrome with remote debugging on port 9222.
+
+`backend/requirements.lock.txt` records the exact verified Python environment; use it for reproducible installation. `frontend/package-lock.json` records the frontend versions; use `npm ci` for clean installs. GitHub Actions checks backend tests and the frontend build. A backend Dockerfile is included, but a Docker build and the hosted deployment have not yet been verified.
+
+The live SQLite persistence check also passes: total XP, hearts, streak, completed lesson, and the next unlocked lesson survive stopping and restarting the backend. The browser smoke test has added 20 XP and completed lesson 3 in the local demo database.
+
+For a guided explanation of the implementation, read `CODE_WALKTHROUGH.md`.
