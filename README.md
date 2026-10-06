@@ -152,3 +152,5 @@ For a guided explanation of the implementation, read `CODE_WALKTHROUGH.md`.
 5. In two separate browser profiles or a normal and private window, verify distinct learner IDs, complete a lesson in one, and confirm the other retains its own XP, hearts, and unlocks. Refresh the first browser, restart the backend, and verify the same profile and progress return. Check `/health` and keep the backup until these checks pass.
 
 Verification uses isolated test databases, including a file-backed previous-schema database that is reopened after upgrade. Production data is never used by these tests. The older browser smoke script assumes the original seeded learner and lesson 3; it needs adaptation before use with fresh guests.
+
+Guest display names can be changed in Settings. Names are stored locally per guest ID in the browser and shown on Profile and the current learner's leaderboard entry; the backend display name remains unchanged. Clearing site storage removes the custom name. This frontend-only preference requires no API or database migration.

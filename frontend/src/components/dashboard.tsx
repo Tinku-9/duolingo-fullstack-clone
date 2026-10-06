@@ -5,6 +5,7 @@ import {useCallback, useEffect, useState} from "react";
 import {useRouter} from "next/navigation";
 import {BookOpen, Check, ChevronRight, Flame, Gem, Heart, Home, Lock, Settings, Shield, Sparkles, Star, Trophy, User, X, Zap} from "lucide-react";
 import {api, Attempt, Leaderboard, Learner, Profile, Skill, Unit} from "@/lib/api";
+import {guestName, saveGuestName} from "@/lib/guest-name";
 import {Mascot} from "./mascot";
 import {useDialogFocus} from "./use-dialog-focus";
 
@@ -20,14 +21,25 @@ export function Dashboard({page}: {page: "learn" | "leaderboard" | "profile" | "
   const [heartModal, setHeartModal] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [nameMessage, setNameMessage] = useState("");
+  const [nameError, setNameError] = useState("");
   useDialogFocus(heartModal, () => setHeartModal(false));
   const load = useCallback(async () => {
     setError("");
     try {
-      const learner = await api<Learner>("/api/me"); setMe(learner);
+      const learner = await api<Learner>("/api/me");
+      learner.display_name = guestName(learner.id, learner.display_name);
+      setMe(learner); setDisplayName(learner.display_name);
       if (page === "learn") { const [path, attempt] = await Promise.all([api<{units: Unit[]}>(`/api/courses/${learner.course_id}/path`), api<Attempt | null>("/api/me/active-attempt")]); setUnits(path.units); setActive(attempt); }
-      if (page === "leaderboard") setBoard(await api<Leaderboard>("/api/leaderboard"));
-      if (page === "profile") setProfile(await api<Profile>("/api/me/profile"));
+      if (page === "leaderboard") {
+        const ranking = await api<Leaderboard>("/api/leaderboard");
+        setBoard({...ranking, entries: ranking.entries.map(entry => entry.is_you ? {...entry, name: learner.display_name} : entry)});
+      }
+      if (page === "profile") {
+        const details = await api<Profile>("/api/me/profile");
+        setProfile({...details, display_name: learner.display_name});
+      }
     } catch (e) {setError((e as Error).message);}
   }, [page]);
   useEffect(() => {void load();}, [load]);
@@ -38,6 +50,17 @@ export function Dashboard({page}: {page: "learn" | "leaderboard" | "profile" | "
     finally {setBusy(false);}
   }
   async function refill() {setBusy(true); try {setMe(await api<Learner>("/api/me/hearts/refill", {method: "POST"})); setHeartModal(false);} catch(e) {setError((e as Error).message);} finally {setBusy(false);}}
+
+  function saveName(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!me) return;
+    setNameMessage(""); setNameError("");
+    try {
+      const name = saveGuestName(me.id, displayName);
+      setDisplayName(name); setMe({...me, display_name: name});
+      setNameMessage("Your name has been saved.");
+    } catch (e) {setNameError((e as Error).message);}
+  }
 
   return <div className="app-shell">
     <aside className="sidebar"><Link className="wordmark" href="/learn">duolingo</Link><nav aria-label="Main navigation">{navigation.map(({href, name, icon: Icon}) => <Link key={href} href={href} className={`nav-item ${href === `/${page}` ? "selected" : ""}`}><Icon size={28}/><span>{name}</span></Link>)}</nav><div className="sidebar-note"><Mascot small/><p>A little learning.<br/>A lot of possibility.</p></div></aside>
@@ -58,7 +81,7 @@ export function Dashboard({page}: {page: "learn" | "leaderboard" | "profile" | "
       </>}
       {page === "leaderboard" && board && <><div className="page-hero"><Trophy className="gold" size={70}/><h1>Bronze League</h1><p>A little friendly competition goes a long way.</p><span className="pill">Week of {board.week_start}</span></div><div className="leaderboard-list">{board.entries.map(entry => <div key={entry.id} className={`leaderboard-row ${entry.is_you ? "you" : ""}`}><span className={`rank rank-${entry.rank}`}>{entry.rank}</span><span className={`avatar avatar-${entry.id % 4}`}>{entry.name[0]}</span><strong>{entry.name}{entry.is_you && <small> YOU</small>}</strong><span>{entry.xp} XP</span></div>)}</div><p className="muted centered">Your XP updates as you learn. Other learners are seeded demo profiles.</p></>}
       {page === "profile" && profile && <><div className="profile-header"><div className="profile-avatar">{profile.display_name[0]}</div><h1>{profile.display_name}</h1><p>Learning Spanish · One day at a time</p></div><h2>Statistics</h2><div className="stats-grid"><StatCard icon={<Flame className="orange"/>} value={profile.streak} label="Day streak"/><StatCard icon={<Zap className="gold"/>} value={profile.total_xp} label="Total XP"/><StatCard icon={<Check className="green"/>} value={profile.completed_skills} label="Skills completed"/><StatCard icon={<Shield className="blue"/>} value="Bronze" label="Current league"/></div><h2>Achievements</h2>{profile.achievements.map((badge, i) => <div key={badge.title} className={`achievement ${badge.earned ? "earned" : ""}`}><div className="achievement-icon">{i === 0 ? <Flame/> : i === 1 ? <Zap/> : <Star/>}</div><div><h3>{badge.title}</h3><p>{badge.description}</p></div>{badge.earned ? <Check className="green"/> : <Lock className="muted"/>}</div>)}</>}
-      {page === "settings" && <><h1>Settings</h1><p className="muted">Your learning space, your way.</p><div className="settings-card"><h2>Account</h2><p>This assignment uses a default logged-in learner named Alex. Real authentication is a future feature.</p><h2>Learning preferences</h2><p>Spanish · English interface · 40 XP daily goal</p><h2>Coming soon</h2><p>Notifications, additional languages, subscription purchases, and speech recognition.</p></div></>}
+      {page === "settings" && <><h1>Settings</h1><p className="muted">Your learning space, your way.</p><div className="settings-card"><h2>Account</h2><p>You have your own guest profile in this browser. Your learning progress is saved automatically.</p><form className="name-form" onSubmit={saveName}><label htmlFor="display-name">Your name</label><input id="display-name" name="displayName" autoComplete="nickname" value={displayName} onChange={event => {setDisplayName(event.target.value); setNameMessage(""); setNameError("");}} required maxLength={50} disabled={!me} aria-describedby="name-help"/><p id="name-help">Your name is saved in this browser and appears on your profile and leaderboard. Clearing site data removes it.</p><button className="button primary" type="submit" disabled={!me || !displayName.trim()}>Save name</button><div aria-live="polite" className="name-status">{nameMessage}</div>{nameError && <div className="red" role="alert">{nameError}</div>}</form><h2>Learning preferences</h2><p>Spanish · English interface · 40 XP daily goal</p><h2>Coming soon</h2><p>Notifications, additional languages, subscription purchases, and speech recognition.</p></div></>}
     </main><aside className="right-rail"><div className="rail-card super-card"><Sparkles className="purple"/><h2>Make every day count</h2><p>Small steps today. Big progress tomorrow.</p><Mascot/><Link className="button secondary" href="/profile">View your progress</Link></div><div className="rail-card"><div className="card-heading"><h2>Daily goal</h2><Zap className="gold"/></div><p>Earn {me?.daily_goal_xp ?? 40} XP today</p><div className="goal-track"><span style={{width: `${Math.min(100, (me?.daily_xp ?? 0) / (me?.daily_goal_xp ?? 40) * 100)}%`}}/></div><strong className="muted">{me?.daily_xp ?? 0} / {me?.daily_goal_xp ?? 40} XP</strong></div><div className="rail-card"><div className="card-heading"><h2>Bronze League</h2><Shield className="gold"/></div><p>Keep learning to climb the ranks.</p><Link className="text-link" href="/leaderboard">View leaderboard <ChevronRight size={17}/></Link></div><footer className="rail-footer">ABOUT · HELP · PRIVACY<br/>Independent assignment demo</footer></aside></div></div>
     {heartModal && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="heart-title"><button className="modal-close" onClick={() => setHeartModal(false)} aria-label="Close"><X/></button><Heart size={64} className="red" fill="currentColor"/><h2 id="heart-title">Keep your heart in it</h2><p>You have {me?.hearts ?? 0} of 5 hearts. Mistakes use one heart.</p><p className="muted">Demo refill: restore your hearts for free.</p><button className="button primary" disabled={busy} onClick={() => void refill()}>{busy ? "Refilling…" : "Refill hearts"}</button></section></div>}
   </div>;
