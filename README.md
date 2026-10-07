@@ -1,6 +1,6 @@
 # Duolingo Fullstack Assignment
 
-**Live demo:** [Open the Spanish learning app](https://duolingo-fullstack-clone-seven.vercel.app/)
+**Live demo:** [Open the Duolingo learning app](https://duolingo-fullstack-clone-seven.vercel.app/)
 
 An original Spanish-learning application built with Next.js/TypeScript, FastAPI, SQLAlchemy, and SQLite. Includes a sequential learning path, five exercise types, persisted lesson attempts, hearts, daily XP goals, streaks, a seeded leaderboard, and learner profiles.
 
