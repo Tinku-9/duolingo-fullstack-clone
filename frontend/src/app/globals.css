@@ -16,3 +16,35 @@
 .pronunciation{margin:-8px 0 24px}.pronunciation-button{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:9px 15px;border:2px solid var(--border);border-bottom-width:4px;border-radius:12px;color:var(--blue);background:white}.pronunciation p{font-size:13px;margin:8px 0 0}.lesson-confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:30}.lesson-confetti i{position:absolute;top:-24px;width:9px;height:15px;border-radius:2px;animation:confetti-fall 2.6s ease-in forwards}@keyframes confetti-fall{0%{top:-24px;opacity:1}85%{opacity:1}100%{top:100%;opacity:0;rotate:540deg}}@media(prefers-reduced-motion:reduce){.lesson-confetti{display:none}}
 
 .unit-guide-button{display:grid;place-items:center;min-width:48px;min-height:48px;flex-shrink:0;border:2px solid #ffffff80;border-bottom-width:4px;border-radius:14px;background:#ffffff18;color:inherit}.unit-guide-button:hover{background:#ffffff30}.modal.unit-guide{max-width:560px;max-height:85dvh;overflow-y:auto;text-align:left;padding:26px}.unit-guide-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.unit-guide-header span{font-size:12px;letter-spacing:1px}.unit-guide-header h2{display:flex;align-items:center;gap:10px;margin:8px 0 0}.unit-guide h3{margin-top:24px}.guide-vocabulary{width:100%;border-collapse:collapse;font-size:15px}.guide-vocabulary th,.guide-vocabulary td{text-align:left;padding:10px;border-bottom:1px solid var(--border)}.guide-vocabulary th{color:var(--muted);font-size:13px}.guide-example{background:#f7f7f7;border:2px solid var(--border);border-radius:14px;padding:15px;margin-bottom:12px}.guide-example strong{font-size:18px}.guide-example p{margin:4px 0 12px}.guide-example .pronunciation{margin:0}.guide-tip{padding:16px;background:#f0fae7;border-radius:14px;margin:20px 0}.guide-tip h3{margin:0 0 8px}.guide-tip p{margin:0}.unit-guide>.button{margin-top:8px}
+
+/* Browser-saved appearance preference, applied before the page paints. */
+:root{color-scheme:light;--surface:#fff;--page:#fff}
+:root[data-theme="dark"]{color-scheme:dark;--page:#131f24;--surface:#1b2b33;--ink:#edf3f5;--muted:#acbdc7;--border:#37464f;--green-dark:#72c92d;--blue:#56c6ff}
+.theme-settings{margin:0 0 30px}.theme-row{display:flex;align-items:center;justify-content:space-between;gap:18px}.theme-row p{margin:6px 0 0!important;font-size:14px}.theme-toggle{display:flex;align-items:center;gap:8px;min-height:46px;padding:10px 15px;background:var(--surface);color:var(--ink);border:2px solid var(--border);border-radius:12px;flex-shrink:0}.theme-toggle[aria-checked="true"]{border-color:var(--blue);color:var(--blue)}.theme-message{font-size:13px;margin-top:8px}.theme-message:empty{display:none}
+[data-theme="dark"] body{background:var(--page)}
+[data-theme="dark"] .sidebar,[data-theme="dark"] .modal,[data-theme="dark"] .skill-popover,[data-theme="dark"] .lesson-footer,[data-theme="dark"] .speech-bubble:before,[data-theme="dark"] .feedback-icon{background:var(--surface)}
+[data-theme="dark"] .topbar{background:#131f24f7}
+[data-theme="dark"] .rail-card,[data-theme="dark"] .settings-card,[data-theme="dark"] .stat-card,[data-theme="dark"] .achievement,[data-theme="dark"] .speech-bubble{background:var(--surface)}
+[data-theme="dark"] .button.secondary,[data-theme="dark"] .choice,[data-theme="dark"] .word-token,[data-theme="dark"] .match-item,[data-theme="dark"] .accent-buttons button,[data-theme="dark"] .pronunciation-button{background:var(--surface);color:var(--ink)}
+[data-theme="dark"] .button.secondary,[data-theme="dark"] .pronunciation-button{color:var(--blue)}
+[data-theme="dark"] .name-form input,[data-theme="dark"] .text-answer textarea,[data-theme="dark"] .guide-example,[data-theme="dark"] .pill,[data-theme="dark"] .nav-item:hover{background:#22343e;color:var(--ink)}
+[data-theme="dark"] .nav-item.selected,[data-theme="dark"] .choice.chosen,[data-theme="dark"] .match-item.chosen,[data-theme="dark"] .leaderboard-row.you,[data-theme="dark"] .resume-banner{background:#183e50;border-color:#367c9c;color:#70d5ff}
+[data-theme="dark"] .resume-banner a,[data-theme="dark"] .leaderboard-row small,[data-theme="dark"] .choice.chosen .choice-number{color:#70d5ff}
+[data-theme="dark"] .match-item.paired,[data-theme="dark"] .guide-tip{background:#213d2b;border-color:#487e32;color:#a0e866}
+[data-theme="dark"] .pair-index{background:#355530;color:#c5f5a1}
+[data-theme="dark"] .goal-track,[data-theme="dark"] .lesson-progress,[data-theme="dark"] .word-token.used{background:var(--border)}
+[data-theme="dark"] .word-token.used{color:transparent}
+[data-theme="dark"] .button:disabled{background:var(--border);border-color:var(--border);color:#a3b0b8}
+[data-theme="dark"] .node-face{box-shadow:0 0 0 7px var(--page)}
+[data-theme="dark"] .path-node.locked .node-face{background:#37464f;border-color:#273740;color:#a3b0b8}
+[data-theme="dark"] .start-bubble,[data-theme="dark"] .start-bubble:after{background:var(--surface)}
+[data-theme="dark"] .nav-item,[data-theme="dark"] .node-label,[data-theme="dark"] .section-heading,[data-theme="dark"] .path-decoration,[data-theme="dark"] .sidebar-note,[data-theme="dark"] .rail-footer,[data-theme="dark"] .loading,[data-theme="dark"] .page-hero p,[data-theme="dark"] .rail-card p,[data-theme="dark"] .settings-card p,[data-theme="dark"] .profile-header p,[data-theme="dark"] .stat-card span,[data-theme="dark"] .achievement p,[data-theme="dark"] .modal p,[data-theme="dark"] .end-summary>p,[data-theme="dark"] .leaderboard-row>span:last-child,[data-theme="dark"] .text-answer label,[data-theme="dark"] .text-answer textarea:disabled{color:var(--muted)}
+[data-theme="dark"] .achievement-icon{background:#34434b;color:#a3b0b8}
+[data-theme="dark"] .achievement.earned .achievement-icon{background:#493e1b;color:#ffd54a}
+[data-theme="dark"] .error-box{background:#49252c;border-color:#8b4d56;color:#ffb7be}
+[data-theme="dark"] .error-box button{color:#ffb7be}
+[data-theme="dark"] .lesson-footer.correct{background:#213d2b;border-color:#487e32;color:#a0e866}
+[data-theme="dark"] .lesson-footer.incorrect{background:#49252c;border-color:#8b4d56;color:#ffb7be}
+[data-theme="dark"] .lesson-footer.incorrect .button.danger{color:white}
+[data-theme="dark"] .end-summary h1,[data-theme="dark"] .completion-card.accuracy{color:#a0e866}
+[data-theme="dark"] .modal-backdrop{background:#0009}
